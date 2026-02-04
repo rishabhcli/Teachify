@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { GameCode } from './ui/game-code';
-import { Users, Trophy, Check, Gamepad2, Home, Clock, Zap, Heart, Shield, Map, Star, ArrowRight } from 'lucide-react';
+import { Users, Trophy, Check, Gamepad2, Home, Clock, Zap, Heart, Shield, Map, Star, ArrowRight, Lightbulb } from 'lucide-react';
 
 interface GamePlayProps {
   gameData: GameData;
@@ -183,19 +183,33 @@ export const GamePlay: React.FC<GamePlayProps> = ({ gameData, onExit }) => {
             {phase === "results" && (
                 <div className="w-full max-w-md mx-auto animate-scale-in pt-8">
                     <Card variant={selectedOption === currentQuestion.correctIndex ? "green" : "pink"} className="p-6 mb-6 text-center shadow-xl">
-                        <div className="flex items-center justify-center gap-2 mb-3">
+                        <div className="flex items-center justify-center gap-2 mb-4">
                             {selectedOption === currentQuestion.correctIndex ? (
                                 <Check className="w-8 h-8 text-green-600" />
                             ) : (
-                                <span className="text-4xl text-red-600">✗</span>
+                                <div className="relative">
+                                    <span className="text-4xl text-red-600">✗</span>
+                                </div>
                             )}
                             <span className={`text-2xl font-bold ${selectedOption === currentQuestion.correctIndex ? "text-green-700" : "text-red-700"}`}>
                                 {selectedOption === currentQuestion.correctIndex ? "Correct!" : "Incorrect"}
                             </span>
                         </div>
-                        <p className="text-sm text-paper-500 mb-2">The correct answer is:</p>
-                        <p className="text-lg font-semibold text-paper-900 mb-4">{currentQuestion.options[currentQuestion.correctIndex]}</p>
-                        <p className="text-sm text-paper-600 bg-white/50 p-3 rounded-lg text-left">{currentQuestion.explanation}</p>
+                        
+                        <div className="mb-6">
+                            <p className="text-xs uppercase tracking-widest text-paper-500 font-bold mb-1">Correct Answer</p>
+                            <p className="text-lg font-bold text-paper-900">{currentQuestion.options[currentQuestion.correctIndex]}</p>
+                        </div>
+
+                        <div className="bg-white/60 rounded-xl p-4 text-left border-l-4 border-highlight-yellow shadow-sm">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Lightbulb className="w-4 h-4 text-yellow-600 fill-yellow-600" />
+                                <span className="text-xs font-bold uppercase tracking-wider text-yellow-700">Learning Context</span>
+                            </div>
+                            <p className="text-paper-800 text-sm leading-relaxed">
+                                {currentQuestion.explanation}
+                            </p>
+                        </div>
                     </Card>
                     
                     <Button onClick={handleNextQuestion} variant="default" size="lg" className="w-full">

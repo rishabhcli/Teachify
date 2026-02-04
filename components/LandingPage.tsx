@@ -158,14 +158,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartCreate, onJoinG
               </Card>
               
               {/* Floating elements */}
-              <Card variant="green" className="absolute -bottom-6 -left-6 p-4 transform -rotate-6 hidden md:block">
+              <Card variant="green" className="absolute -bottom-6 -left-6 p-4 transform -rotate-6 hidden md:block backdrop-blur-md bg-white/60">
                 <div className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-green-600" />
                   <span className="font-bold text-paper-900">24 players joined</span>
                 </div>
               </Card>
               
-              <Card variant="blue" className="absolute -top-4 -right-4 p-3 transform rotate-6 hidden md:block">
+              <Card variant="blue" className="absolute -top-4 -right-4 p-3 transform rotate-6 hidden md:block backdrop-blur-md bg-white/60">
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 text-highlight-yellow fill-highlight-yellow" />
                   <span className="font-bold text-paper-900">4.9</span>

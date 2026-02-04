@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { GameData } from "../types";
 
 export interface GenerateOptions {
@@ -24,110 +24,110 @@ const parseGameResponse = (responseText: string, options: GenerateOptions): Game
     } as GameData;
   } catch (e) {
     console.error("Failed to parse game data", e);
-    throw new Error("Could not generate a valid game from the content provided.");
+    console.log("Raw response:", responseText);
+    throw new Error("The AI generated an invalid game format. Please try again.");
   }
 };
 
 export const generateGameFromContent = async (options: GenerateOptions): Promise<GameData> => {
-  if (!process.env.API_KEY) {
-     console.warn("No API Key found. Returning mock data.");
-     return {
-        code: "TEST",
-        isEngine: options.gameMode === 'engine',
-        title: "Mock Generated Game",
-        description: "A sample game generated without API key.",
-        theme: options.preferredGenre as any || "science",
-        questions: [
-            {
-                id: "1",
-                text: "What is the powerhouse of the cell?",
-                options: ["Nucleus", "Mitochondria", "Ribosome", "Chloroplast"],
-                correctIndex: 1,
-                explanation: "Mitochondria are responsible for generating most of the cell's supply of adenosine triphosphate (ATP).",
-                concept: "Cell Biology",
-                misconception: "Some believe the nucleus produces energy."
-            }
-        ]
-     };
-  }
-
+  // We strictly rely on the environment variable as per Google GenAI SDK guidelines.
+  // The environment (Google AI Studio) guarantees this is populated.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
-    You are an expert educational game designer. 
-    Analyze the following lesson content and create a game data structure.
+    You are an award-winning educational game designer known for turning dry curriculum into exciting adventures.
     
-    Context:
-    - Content: "${options.content.slice(0, 15000)}"
-    - Learning Objective: "${options.objective}"
-    - Bloom's Taxonomy Level: "${options.objectiveType}"
-    - Game Mode: ${options.gameMode}
+    TASK:
+    Analyze the provided lesson content and design a game concept that reinforces the Learning Objective: "${options.objective}" (${options.objectiveType} level).
+    
+    CONTENT:
+    [[LESSON CONTENT START]]
+    ${options.content.slice(0, 40000)}
+    [[LESSON CONTENT END]]
+    
+    GAME MODE: ${options.gameMode}
     ${options.gameMode === 'engine' ? `
-    - Preferred Genre: ${options.preferredGenre || "Auto-detect suitable genre"}
-    - Mechanics to Include: ${options.preferredMechanics?.join(', ') || "None specified"}
-    - Mechanics to Avoid: ${options.avoidMechanics?.join(', ') || "None specified"}
+    - Genre preference: ${options.preferredGenre || "Choose a genre that best fits the content (e.g. History -> Time Travel/Mystery, Science -> Lab Simulation/Sci-Fi)"}
+    - Mechanics to highlight: ${options.preferredMechanics?.join(', ') || "N/A"}
+    - Mechanics to avoid: ${options.avoidMechanics?.join(', ') || "N/A"}
     ` : ''}
-    
-    Task:
-    Create a game that fulfills the learning objective.
-    If Game Mode is 'engine', be creative with the title and description to match the genre (e.g., if Economic, use terms like 'Market', 'Trade').
-    If Game Mode is 'legacy', stick to a standard quiz format.
-    
-    Return a JSON object with this schema:
-    {
-      "title": "A catchy title for the game",
-      "description": "A short description",
-      "theme": "default" | "adventure" | "science" | "history" | "economic" | "combat" | "spatial" | "social" | "racing" | "puzzle",
-      "questions": [
-        {
-          "id": "unique_id",
-          "text": "Question text testing understanding (not just recall)",
-          "options": ["Option A", "Option B", "Option C", "Option D"],
-          "correctIndex": 0, // 0-3
-          "explanation": "Why this is correct",
-          "concept": "The key concept being tested",
-          "misconception": "A common wrong belief related to this concept"
-        }
-      ]
-    }
-    
-    Generate at least 5 questions. Make sure options are plausible.
+
+    DESIGN GUIDELINES:
+    1. TITLE & DESCRIPTION: Be creative! Instead of "History Quiz", use catchy titles like "The Chrono-Detectives: 1812" or "Cellular Defense Force". 
+       The description should set the scene (e.g., "You are a time traveler stranded in...", "Command the cell's defenses against...").
+    2. QUESTIONS: 
+       - Generate 5-10 questions.
+       - Questions should apply the concept, not just recall facts (unless objective is 'remember').
+       - Distractors (wrong answers) should be plausible common misconceptions.
+       - The 'explanation' should be instructive and helpful.
+    3. THEME: Select the most appropriate visual theme from the list.
+
+    OUTPUT JSON FORMAT ONLY.
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          theme: { type: Type.STRING },
-          questions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                text: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                correctIndex: { type: Type.INTEGER },
-                explanation: { type: Type.STRING },
-                concept: { type: Type.STRING },
-                misconception: { type: Type.STRING }
-              }
+  try {
+    // Add a timeout to prevent hanging indefinitely
+    // Increased to 3 minutes to handle larger content analysis
+    const timeoutMs = 180000; 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await Promise.race([
+        ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: {
+                temperature: 0.9, // Higher creativity
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                    title: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    theme: { type: Type.STRING },
+                    questions: {
+                        type: Type.ARRAY,
+                        items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            id: { type: Type.STRING },
+                            text: { type: Type.STRING },
+                            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                            correctIndex: { type: Type.INTEGER },
+                            explanation: { type: Type.STRING },
+                            concept: { type: Type.STRING },
+                            misconception: { type: Type.STRING }
+                        }
+                        }
+                    }
+                    }
+                }
             }
-          }
-        }
-      }
+        }),
+        new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error("Request timed out")), timeoutMs)
+        )
+    ]);
+    
+    clearTimeout(timeoutId);
+
+    if (response instanceof Error) {
+        throw response;
     }
-  });
 
-  if (!response.text) {
-    throw new Error("No content generated");
+    const typedResponse = response as GenerateContentResponse;
+
+    if (!typedResponse.text) {
+        throw new Error("No content generated by AI.");
+    }
+
+    return parseGameResponse(typedResponse.text, options);
+
+  } catch (error: any) {
+    console.error("Gemini API Error:", error);
+    if (error.name === 'AbortError' || error.message.includes('timed out')) {
+        throw new Error("The request timed out. The service might be busy or the content is complex. Please try again.");
+    }
+    throw new Error(error.message || "Failed to generate game. Please check your connection and try again.");
   }
-
-  return parseGameResponse(response.text, options);
 };

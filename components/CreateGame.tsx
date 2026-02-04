@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -13,9 +13,11 @@ import {
   GraduationCap,
   Loader2,
   X,
-  File
+  File,
+  AlertCircle
 } from "lucide-react";
 import { generateGameFromContent, GenerateOptions } from "../services/gemini";
+import { parseFile } from "../utils/file-processing";
 import { GameData } from "../types";
 
 // --- Types ---
@@ -63,6 +65,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
   const [objective, setObjective] = useState("");
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>("understand");
   const [loading, setLoading] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Game mode and hints
@@ -76,6 +79,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
   const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
   const isContentShort = wordCount > 0 && wordCount < 50;
   const canGenerate = content.trim().length > 0 && objective.trim().length > 0;
+  const isCancelled = useRef(false);
 
   const toggleMechanic = (mechanicId: string, list: "preferred" | "avoid") => {
     if (list === "preferred") {
@@ -95,24 +99,30 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
+    setIsParsing(true);
+    setError(null);
+    setContent(""); // Clear previous content while loading
 
-    if (file.type === "text/plain") {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setContent(e.target?.result as string);
-      };
-      reader.readAsText(file);
-    } else if (file.name.endsWith('.pdf') || file.name.endsWith('.docx') || file.name.endsWith('.pptx')) {
-        // Mock extraction for demo purposes
-        setContent("This is simulated content extracted from " + file.name + ". In a real implementation, a backend service would parse the binary file. For now, we assume the lesson is about: The structure of cells, including mitochondria, nucleus, and ribosomes. Photosynthesis converts light energy into chemical energy.");
-    } else {
-        setError("Unsupported file type. Please use .txt, .pdf, .docx, or .pptx");
-        setFileName("");
+    try {
+        const extractedText = await parseFile(file);
+        
+        if (!extractedText || extractedText.trim().length === 0) {
+             throw new Error("Could not extract any text from this file. It might be empty or scanned images.");
+        }
+        setContent(extractedText);
+    } catch (err: any) {
+        console.error("File parsing error:", err);
+        setError(err.message || "Failed to parse file.");
+        setFileName(""); // Reset filename on error
+    } finally {
+        setIsParsing(false);
+        // Clear input so same file can be selected again
+        e.target.value = '';
     }
   };
 
@@ -120,6 +130,8 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
     if (!canGenerate) return;
     setLoading(true);
     setError(null);
+    isCancelled.current = false;
+
     try {
       const options: GenerateOptions = {
         content,
@@ -132,13 +144,26 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
       };
 
       const data = await generateGameFromContent(options);
-      onGameGenerated(data);
+      
+      if (!isCancelled.current) {
+        onGameGenerated(data);
+      }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to generate game. Please try again.");
+      if (!isCancelled.current) {
+        console.error(err);
+        setError(err.message || "Failed to generate game. Please try again.");
+      }
     } finally {
-      setLoading(false);
+      if (!isCancelled.current) {
+        setLoading(false);
+      }
     }
+  };
+
+  const cancelGeneration = () => {
+    isCancelled.current = true;
+    setLoading(false);
+    setError(null);
   };
 
   return (
@@ -185,7 +210,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
             <Card
               className="cursor-pointer p-5 transition-all hover:scale-[1.01]"
               variant={gameMode === "engine" ? "yellow" : "default"}
-              onClick={() => setGameMode("engine")}
+              onClick={() => !loading && setGameMode("engine")}
             >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-highlight-purple/20 flex items-center justify-center flex-shrink-0">
@@ -206,7 +231,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
             <Card
               className="cursor-pointer p-5 transition-all hover:scale-[1.01]"
               variant={gameMode === "legacy" ? "yellow" : "default"}
-              onClick={() => setGameMode("legacy")}
+              onClick={() => !loading && setGameMode("legacy")}
             >
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-lg bg-highlight-yellow/20 flex items-center justify-center flex-shrink-0">
@@ -232,45 +257,57 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
 
           <Card variant="default" className="p-6">
             {/* Upload Zone */}
-            <div className="border-2 border-dashed border-paper-300 rounded-xl bg-paper-50 hover:bg-paper-100 transition-colors p-8 text-center mb-6 relative">
-                <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full">
-                    <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-3">
-                        <Upload className="w-5 h-5 text-paper-600" />
-                    </div>
-                    {fileName ? (
-                         <div className="flex items-center gap-2 text-paper-900 font-medium">
-                            <File className="w-4 h-4" />
-                            {fileName}
-                         </div>
-                    ) : (
-                        <>
-                            <span className="text-sm font-medium text-paper-900 mb-1">Click to upload file</span>
-                            <span className="text-xs text-paper-500">Supported formats: PDF, DOCX, PPTX, TXT</span>
-                        </>
-                    )}
-                    <input 
-                        type="file" 
-                        accept=".txt,.pdf,.docx,.pptx" 
-                        onChange={handleFileUpload}
-                        className="hidden" 
-                    />
-                </label>
+            <div className={`border-2 border-dashed rounded-xl transition-colors mb-4 relative ${isParsing ? 'bg-paper-100 border-paper-300' : 'bg-paper-50 hover:bg-paper-100 border-paper-300'}`}>
+                {isParsing ? (
+                     <div className="flex items-center justify-center py-5">
+                         <Loader2 className="w-5 h-5 text-highlight-purple animate-spin mr-3" />
+                         <span className="text-sm font-medium text-paper-600">Extracting content...</span>
+                     </div>
+                ) : (
+                    <label className={`cursor-pointer flex flex-row items-center justify-center gap-3 w-full py-3 px-4 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <div className="w-8 h-8 bg-white rounded-full shadow-sm flex items-center justify-center flex-shrink-0 border border-paper-100">
+                            <Upload className="w-4 h-4 text-paper-600" />
+                        </div>
+                        <div>
+                            {fileName ? (
+                                <div className="flex items-center gap-2 text-paper-900 font-medium text-sm">
+                                    <File className="w-4 h-4 flex-shrink-0" />
+                                    <span className="truncate max-w-[200px]">{fileName}</span>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                                    <span className="text-sm font-medium text-paper-900">Click to upload file</span>
+                                    <span className="text-xs text-paper-500 hidden sm:inline">•</span>
+                                    <span className="text-xs text-paper-500">PDF, DOCX, PPTX, TXT, MD</span>
+                                </div>
+                            )}
+                        </div>
+                        <input 
+                            type="file" 
+                            accept=".txt,.pdf,.docx,.pptx,.md" 
+                            onChange={handleFileUpload}
+                            className="hidden" 
+                            disabled={loading}
+                        />
+                    </label>
+                )}
             </div>
 
             {/* Divider */}
-            <div className="flex items-center gap-4 my-6">
+            <div className="flex items-center gap-4 my-3">
               <div className="flex-1 h-px bg-paper-200" />
-              <span className="text-sm text-paper-400 font-medium">or paste text</span>
+              <span className="text-xs text-paper-400 font-medium uppercase tracking-wider">or paste text</span>
               <div className="flex-1 h-px bg-paper-200" />
             </div>
 
             {/* Text Input */}
             <div>
                  <textarea
-                    className="w-full h-48 p-4 rounded-xl border-2 border-paper-200 focus:border-paper-900 focus:ring-0 resize-none font-mono text-sm bg-white transition-colors placeholder:text-paper-400"
-                    placeholder="Paste your lesson content here... (e.g., A paragraph about the solar system, a history summary, or biology notes)"
+                    className="w-full h-24 p-4 rounded-xl border-2 border-paper-200 focus:border-paper-900 focus:ring-0 resize-none font-mono text-sm bg-white transition-colors placeholder:text-paper-400 disabled:opacity-50"
+                    placeholder="Paste your lesson content here..."
                     value={content}
                     onChange={(e) => setContent(e.target.value)}
+                    disabled={isParsing || loading}
                 />
             </div>
           </Card>
@@ -296,6 +333,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
                 onChange={(e) => setObjective(e.target.value)}
                 placeholder='e.g. "Understand the causes of the French Revolution"'
                 className="w-full h-11 px-4 rounded-lg border-2 border-paper-200 focus:border-paper-900 focus:ring-0 transition-all text-sm"
+                disabled={loading}
               />
             </div>
 
@@ -309,11 +347,13 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
                     <button
                         key={type.value}
                         onClick={() => setObjectiveType(type.value)}
+                        disabled={loading}
                         className={`
                             px-2 py-2 rounded-lg text-xs font-medium transition-all border-2
                             ${objectiveType === type.value 
                                 ? "bg-paper-900 text-white border-paper-900" 
                                 : "bg-white text-paper-600 border-paper-200 hover:border-paper-400"}
+                            ${loading ? "opacity-50 cursor-not-allowed" : ""}
                         `}
                     >
                         {type.label}
@@ -330,7 +370,8 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center gap-2 text-sm text-paper-500 hover:text-paper-700 transition-colors"
+              disabled={loading}
+              className="flex items-center gap-2 text-sm text-paper-500 hover:text-paper-700 transition-colors disabled:opacity-50"
             >
               {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               Advanced Options (Optional)
@@ -424,19 +465,19 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
         )}
 
         {/* Generate Button */}
-        <div>
+        <div className="flex flex-col gap-3">
           <Button
             onClick={handleGenerate}
-            disabled={!canGenerate || loading}
+            disabled={!canGenerate || loading || isParsing}
             variant={gameMode === "engine" ? "purple" : "yellow"}
             size="lg"
-            className="w-full"
+            className="w-full relative overflow-hidden"
           >
             {loading ? (
-                <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Generating Magic...
-                </>
+                <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Analyzing Content & Designing Game...</span>
+                </div>
             ) : gameMode === "engine" ? (
               <>
                 <Gamepad2 className="w-5 h-5 mr-2" />
@@ -449,18 +490,32 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
               </>
             )}
           </Button>
+
+          {loading && (
+             <Button
+                onClick={cancelGeneration}
+                variant="ghost"
+                size="sm"
+                className="w-full text-red-500 hover:bg-red-50 hover:text-red-700"
+             >
+                Cancel Generation
+             </Button>
+          )}
         </div>
 
         {/* Error Display */}
         {error && (
           <Card variant="pink" className="mt-6 p-4 flex items-start gap-3">
-             <X className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700 font-medium">{error}</p>
+             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+             <div className="flex-1">
+                 <p className="text-sm text-red-700 font-bold mb-1">Generation Failed</p>
+                 <p className="text-sm text-red-700">{error}</p>
+             </div>
           </Card>
         )}
 
         {/* Content Preview */}
-        {content && (
+        {content && !isParsing && (
           <Card variant="default" className="mt-8 p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-paper-500">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Gamepad2, User, X, AlertTriangle, Check, ArrowRight, GraduationCap } from "lucide-react";
+import { Gamepad2, User, X, AlertTriangle, Check, ArrowRight, GraduationCap, WifiOff, Users } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
@@ -14,15 +14,26 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ onJoin, onBack }) => {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [gameStatus, setGameStatus] = useState<'not_found' | 'started' | 'found' | null>(null);
+  const [gameStatus, setGameStatus] = useState<'not_found' | 'started' | 'found' | 'full' | 'error' | null>(null);
 
   // Mock checking game status when code is 6 chars
   useEffect(() => {
     if (code.length === 6) {
       // Simulate API check
       const timer = setTimeout(() => {
-        // For demo, assume any 6 char code is valid
-        setGameStatus('found');
+        // Mock scenarios based on code for demonstration
+        if (code === "FULL00") {
+            setGameStatus('full');
+        } else if (code === "LIVE00") {
+            setGameStatus('started');
+        } else if (code === "WIFI00") {
+            setGameStatus('error');
+        } else if (code === "BAD000") {
+            setGameStatus('not_found');
+        } else {
+            // Default success for other codes
+            setGameStatus('found');
+        }
       }, 500);
       return () => clearTimeout(timer);
     } else {
@@ -39,6 +50,13 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ onJoin, onBack }) => {
     
     // Simulate network delay
     setTimeout(() => {
+        // Simulate a specific error if name is "Error" for testing
+        if (name.toLowerCase() === "error") {
+            setJoining(false);
+            setError("Connection timed out. Please check your internet.");
+            return;
+        }
+
         setJoining(false);
         onJoin(code, name);
     }, 1000);
@@ -131,13 +149,25 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ onJoin, onBack }) => {
                 {gameStatus === 'not_found' && (
                   <div className="flex items-center justify-center gap-2 text-highlight-pink animate-scale-in">
                     <X className="w-4 h-4" />
-                    <span className="text-sm font-medium">Game not found</span>
+                    <span className="text-sm font-medium">Invalid game code</span>
                   </div>
                 )}
                 {gameStatus === 'started' && (
                   <div className="flex items-center justify-center gap-2 text-highlight-orange animate-scale-in">
                     <AlertTriangle className="w-4 h-4" />
-                    <span className="text-sm font-medium">Game already started</span>
+                    <span className="text-sm font-medium">Game already in progress</span>
+                  </div>
+                )}
+                {gameStatus === 'full' && (
+                  <div className="flex items-center justify-center gap-2 text-highlight-purple animate-scale-in">
+                    <Users className="w-4 h-4" />
+                    <span className="text-sm font-medium">Lobby is full (Max 30)</span>
+                  </div>
+                )}
+                {gameStatus === 'error' && (
+                  <div className="flex items-center justify-center gap-2 text-red-500 animate-scale-in">
+                    <WifiOff className="w-4 h-4" />
+                    <span className="text-sm font-medium">Network error. Try again.</span>
                   </div>
                 )}
                 {gameStatus === 'found' && (
@@ -166,7 +196,8 @@ export const StudentJoin: React.FC<StudentJoinProps> = ({ onJoin, onBack }) => {
 
             {/* Error Display */}
             {error && (
-              <Card variant="pink" className="p-4 animate-scale-in">
+              <Card variant="pink" className="p-4 animate-scale-in flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
                 <p className="text-sm text-red-700 font-medium">{error}</p>
               </Card>
             )}
