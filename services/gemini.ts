@@ -24,110 +24,117 @@ const parseGameResponse = (responseText: string, options: GenerateOptions): Game
     } as GameData;
   } catch (e) {
     console.error("Failed to parse game data", e);
-    console.log("Raw response:", responseText);
     throw new Error("The AI generated an invalid game format. Please try again.");
   }
 };
 
 export const generateGameFromContent = async (options: GenerateOptions): Promise<GameData> => {
-  // We strictly rely on the environment variable as per Google GenAI SDK guidelines.
-  // The environment (Google AI Studio) guarantees this is populated.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const prompt = `
-    You are an award-winning educational game designer known for turning dry curriculum into exciting adventures.
+  // Internal helper to attempt generation with specific constraints
+  const attemptGeneration = async (charLimit: number, timeoutMs: number, label: string): Promise<GameData> => {
+    const truncatedContent = options.content.slice(0, charLimit);
     
-    TASK:
-    Analyze the provided lesson content and design a game concept that reinforces the Learning Objective: "${options.objective}" (${options.objectiveType} level).
-    
-    CONTENT:
-    [[LESSON CONTENT START]]
-    ${options.content.slice(0, 40000)}
-    [[LESSON CONTENT END]]
-    
-    GAME MODE: ${options.gameMode}
-    ${options.gameMode === 'engine' ? `
-    - Genre preference: ${options.preferredGenre || "Choose a genre that best fits the content (e.g. History -> Time Travel/Mystery, Science -> Lab Simulation/Sci-Fi)"}
-    - Mechanics to highlight: ${options.preferredMechanics?.join(', ') || "N/A"}
-    - Mechanics to avoid: ${options.avoidMechanics?.join(', ') || "N/A"}
-    ` : ''}
+    const prompt = `
+      You are an expert game designer.
+      TASK: Create a ${options.gameMode} game JSON for Learning Objective: "${options.objective}" (${options.objectiveType}).
+      
+      CONTENT:
+      ${truncatedContent}
+      
+      REQUIREMENTS:
+      1. Create EXACTLY 5 questions.
+      2. Output JSON only.
+      3. Theme: ${options.gameMode === 'engine' ? (options.preferredGenre || "Adventure") : "Quiz"}.
+      
+      OUTPUT SCHEMA:
+      {
+        "title": "string",
+        "description": "string",
+        "theme": "string",
+        "questions": [
+          {
+            "id": "1",
+            "text": "Question?",
+            "options": ["A", "B", "C", "D"],
+            "correctIndex": 0,
+            "explanation": "Why?",
+            "concept": "Topic",
+            "misconception": "Wrong thought"
+          }
+        ]
+      }
+    `;
 
-    DESIGN GUIDELINES:
-    1. TITLE & DESCRIPTION: Be creative! Instead of "History Quiz", use catchy titles like "The Chrono-Detectives: 1812" or "Cellular Defense Force". 
-       The description should set the scene (e.g., "You are a time traveler stranded in...", "Command the cell's defenses against...").
-    2. QUESTIONS: 
-       - Generate 5-10 questions.
-       - Questions should apply the concept, not just recall facts (unless objective is 'remember').
-       - Distractors (wrong answers) should be plausible common misconceptions.
-       - The 'explanation' should be instructive and helpful.
-    3. THEME: Select the most appropriate visual theme from the list.
-
-    OUTPUT JSON FORMAT ONLY.
-  `;
-
-  try {
-    // Add a timeout to prevent hanging indefinitely
-    // Increased to 3 minutes to handle larger content analysis
-    const timeoutMs = 180000; 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const response = await Promise.race([
-        ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: prompt,
-            config: {
-                temperature: 0.9, // Higher creativity
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    theme: { type: Type.STRING },
-                    questions: {
-                        type: Type.ARRAY,
-                        items: {
+    try {
+        const response = await Promise.race([
+            ai.models.generateContent({
+                model: 'gemini-3-flash-preview',
+                contents: prompt,
+                config: {
+                    temperature: 0.5, // Lower temperature for faster, more deterministic output
+                    thinkingConfig: { thinkingBudget: 0 },
+                    responseMimeType: "application/json",
+                    responseSchema: {
                         type: Type.OBJECT,
                         properties: {
-                            id: { type: Type.STRING },
-                            text: { type: Type.STRING },
-                            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                            correctIndex: { type: Type.INTEGER },
-                            explanation: { type: Type.STRING },
-                            concept: { type: Type.STRING },
-                            misconception: { type: Type.STRING }
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        theme: { type: Type.STRING },
+                        questions: {
+                            type: Type.ARRAY,
+                            items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                id: { type: Type.STRING },
+                                text: { type: Type.STRING },
+                                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                                correctIndex: { type: Type.INTEGER },
+                                explanation: { type: Type.STRING },
+                                concept: { type: Type.STRING },
+                                misconception: { type: Type.STRING }
+                            }
+                            }
                         }
                         }
-                    }
                     }
                 }
-            }
-        }),
-        new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error("Request timed out")), timeoutMs)
-        )
-    ]);
-    
-    clearTimeout(timeoutId);
+            }),
+            new Promise<never>((_, reject) => 
+                setTimeout(() => reject(new Error(`Timeout (${label})`)), timeoutMs)
+            )
+        ]);
+        
+        clearTimeout(timeoutId);
 
-    if (response instanceof Error) {
-        throw response;
+        if (response instanceof Error) throw response;
+        const typedResponse = response as GenerateContentResponse;
+        if (!typedResponse.text) throw new Error("No text generated");
+
+        return parseGameResponse(typedResponse.text, options);
+
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        console.warn(`Generation attempt '${label}' failed:`, error.message);
+        throw error;
     }
+  };
 
-    const typedResponse = response as GenerateContentResponse;
-
-    if (!typedResponse.text) {
-        throw new Error("No content generated by AI.");
+  // ADAPTIVE RETRY STRATEGY
+  // 1. Try with good context (15k chars) and generous timeout.
+  // 2. If that fails, fallback to condensed context (5k chars) and stricter timeout to recover quickly.
+  
+  try {
+    return await attemptGeneration(15000, 45000, "High Detail");
+  } catch (e) {
+    try {
+        // Fallback: This usually succeeds if the first one timed out due to content length
+        return await attemptGeneration(5000, 40000, "Fallback Summary");
+    } catch (finalError: any) {
+        throw new Error("We couldn't generate a game from this content. Please try using a shorter document or pasting a summary.");
     }
-
-    return parseGameResponse(typedResponse.text, options);
-
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    if (error.name === 'AbortError' || error.message.includes('timed out')) {
-        throw new Error("The request timed out. The service might be busy or the content is complex. Please try again.");
-    }
-    throw new Error(error.message || "Failed to generate game. Please check your connection and try again.");
   }
 };

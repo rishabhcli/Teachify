@@ -6,8 +6,6 @@ import JSZip from 'jszip';
 const pdfjsLib = (pdfjsModule as any).default || pdfjsModule;
 
 // Initialize PDF.js worker
-// We use cdnjs here because it serves the worker as a classic script (UMD/IIFE) which is required
-// for the default Worker loader. esm.sh serves it as a module which causes "window.pdfjsWorker is undefined" errors.
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 export async function parseFile(file: File): Promise<string> {
@@ -41,20 +39,21 @@ async function parsePdf(file: File): Promise<string> {
   try {
     const arrayBuffer = await file.arrayBuffer();
     
-    // Load the document
     const loadingTask = pdfjsLib.getDocument({ 
         data: arrayBuffer,
-        // Disable auto fetch to avoid some CORS issues with fonts/etc
         disableAutoFetch: true,
         disableStream: true 
     });
     
     const pdf = await loadingTask.promise;
-    
     let fullText = '';
     
-    // Iterate through all pages
-    for (let i = 1; i <= pdf.numPages; i++) {
+    // OPTIMIZATION: Limit to first 30 pages. 
+    // Most educational content has key info at the start. 
+    // This prevents browser crashes on large textbooks.
+    const maxPages = Math.min(pdf.numPages, 30);
+    
+    for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
@@ -66,7 +65,6 @@ async function parsePdf(file: File): Promise<string> {
     return fullText;
   } catch (error) {
     console.error("PDF Parsing Error Details:", error);
-    // Provide a more helpful error message
     if (error instanceof Error) {
         throw new Error(`PDF Error: ${error.message}`);
     }
@@ -90,12 +88,10 @@ async function parsePptx(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer();
     const zip = await JSZip.loadAsync(arrayBuffer);
     
-    // Find all slide XML files
     const slideFiles = Object.keys(zip.files).filter(fileName => 
       fileName.startsWith('ppt/slides/slide') && fileName.endsWith('.xml')
     );
 
-    // Sort slides naturally (slide1, slide2, slide10...)
     slideFiles.sort((a, b) => {
       const numA = parseInt(a.match(/slide(\d+)\.xml/)![1] || '0');
       const numB = parseInt(b.match(/slide(\d+)\.xml/)![1] || '0');
@@ -103,14 +99,16 @@ async function parsePptx(file: File): Promise<string> {
     });
 
     let fullText = '';
+    
+    // OPTIMIZATION: Limit to first 30 slides
+    const maxSlides = Math.min(slideFiles.length, 30);
+    const slidesToProcess = slideFiles.slice(0, maxSlides);
 
-    for (const slideFile of slideFiles) {
+    for (const slideFile of slidesToProcess) {
       const xmlContent = await zip.files[slideFile].async('string');
       const parser = new DOMParser();
       const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
       
-      // In PPTX XML, text is often in <a:t> elements within the openxmlformats schema
-      // We look for any tag named 'a:t' or just 't' depending on namespace resolution
       const textNodes = xmlDoc.getElementsByTagName('a:t');
       let slideText = '';
       
