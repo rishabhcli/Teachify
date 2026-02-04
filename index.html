@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teachify - AI Learning Games</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              background: '#ffffff',
+              paper: {
+                50: '#f9fafb',
+                100: '#f3f4f6',
+                200: '#e5e7eb',
+                300: '#d1d5db',
+                400: '#9ca3af',
+                500: '#6b7280',
+                600: '#4b5563',
+                700: '#374151',
+                800: '#1f2937',
+                900: '#111827',
+              },
+              highlight: {
+                yellow: '#fde047',
+                purple: '#c084fc',
+                green: '#86efac',
+                blue: '#93c5fd',
+                pink: '#f9a8d4',
+                orange: '#fb923c'
+              }
+            },
+            fontFamily: {
+              display: ['Inter', 'system-ui', 'sans-serif'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
+            animation: {
+              'bounce-slow': 'bounce 3s infinite',
+              'bounce-subtle': 'bounce-subtle 2s infinite',
+              'deal': 'deal 0.5s ease-out backwards',
+              'scale-in': 'scale-in 0.3s ease-out forwards',
+            },
+            keyframes: {
+                'bounce-subtle': {
+                    '0%, 100%': { transform: 'translateY(-5%)' },
+                    '50%': { transform: 'translateY(0)' },
+                },
+                'deal': {
+                    '0%': { opacity: 0, transform: 'translateY(10px) scale(0.9)' },
+                    '100%': { opacity: 1, transform: 'translateY(0) scale(1)' },
+                },
+                'scale-in': {
+                    '0%': { opacity: 0, transform: 'scale(0.95)' },
+                    '100%': { opacity: 1, transform: 'scale(1)' },
+                }
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      body { font-family: 'Inter', sans-serif; }
+      @keyframes slide-up {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-slide-up { animation: slide-up 0.5s ease-out forwards; }
+      .stagger-1 { animation-delay: 100ms; }
+      .stagger-2 { animation-delay: 200ms; }
+      .stagger-3 { animation-delay: 300ms; }
+      .stagger-4 { animation-delay: 400ms; }
+      .stagger-5 { animation-delay: 500ms; }
+      .stagger-6 { animation-delay: 600ms; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

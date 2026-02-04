@@ -1,0 +1,7 @@
+{
+  "name": "Teachify",
+  "description": "Transform educational content into interactive learning games using AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
