@@ -65,6 +65,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
   const [objective, setObjective] = useState("");
   const [objectiveType, setObjectiveType] = useState<ObjectiveType>("understand");
   const [loading, setLoading] = useState(false);
+  const [progressStage, setProgressStage] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -129,6 +130,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
   const handleGenerate = async () => {
     if (!canGenerate) return;
     setLoading(true);
+    setProgressStage("Initializing...");
     setError(null);
     isCancelled.current = false;
 
@@ -143,7 +145,11 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
         avoidMechanics: avoidMechanics.length > 0 ? avoidMechanics : undefined,
       };
 
-      const data = await generateGameFromContent(options);
+      const data = await generateGameFromContent(options, (stage) => {
+        if (!isCancelled.current) {
+            setProgressStage(stage);
+        }
+      });
       
       if (!isCancelled.current) {
         onGameGenerated(data);
@@ -156,6 +162,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
     } finally {
       if (!isCancelled.current) {
         setLoading(false);
+        setProgressStage("");
       }
     }
   };
@@ -163,6 +170,7 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
   const cancelGeneration = () => {
     isCancelled.current = true;
     setLoading(false);
+    setProgressStage("");
     setError(null);
   };
 
@@ -471,12 +479,12 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onGameGenerated, onBack 
             disabled={!canGenerate || loading || isParsing}
             variant={gameMode === "engine" ? "purple" : "yellow"}
             size="lg"
-            className="w-full relative overflow-hidden"
+            className="w-full relative overflow-hidden transition-all duration-300"
           >
             {loading ? (
                 <div className="flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Analyzing Content & Designing Game...</span>
+                    <span>{progressStage || "Generating..."}</span>
                 </div>
             ) : gameMode === "engine" ? (
               <>
